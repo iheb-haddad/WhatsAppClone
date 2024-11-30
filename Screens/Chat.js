@@ -9,33 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
-  Animated,
-  TouchableWithoutFeedback
 } from "react-native";
 import firebase from "../Config"; // Update this to your Firebase config file
 import { SafeAreaView } from "react-native-safe-area-context";
 const reflesdiscussions = firebase.database().ref("lesdiscussions");
-
-const ReactionPicker = ({ messageId, onClose , addReaction}) => {
-  const reactions = ["❤️", "😂", "👍", "😮", "😢", "🔥"];
-
-  return (
-    <View style={styles.reactionPicker}>
-      {reactions.map((reaction) => (
-        <TouchableOpacity
-          key={reaction}
-          onPress={() => {
-            console.log("Add reaction", messageId, reaction);
-            addReaction(messageId, reaction); // Add the reaction
-            onClose(); // Close the picker
-          }}
-        >
-          <Text style={styles.reaction}>{reaction}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-};
 
 
 export default function Chat(props) {
@@ -45,9 +22,6 @@ export default function Chat(props) {
   const userId = firebase.auth().currentUser.uid; // Your unique Firebase ID
   const iddisc = userId > profile.id ? userId + profile.id : profile.id + userId;
   const ref_unediscussion = reflesdiscussions.child(iddisc);
-  const [isTyping, setIsTyping] = useState(false); // Local typing state
-  const [otherTyping, setOtherTyping] = useState(false); // State to track the other user's
-  const [selectedMessageId, setSelectedMessageId] = useState(null);
 
   const database = firebase.database();
 
@@ -57,7 +31,7 @@ export default function Chat(props) {
       const fetchedMessages = [];
       snapshot.forEach((child) => {
         if (child.key !== "typing") {
-          fetchedMessages.push({ id: child.key, ...child.val() });
+          fetchedMessages.push(child.val());
         }
       });
       setMessages(fetchedMessages.reverse());
@@ -66,29 +40,9 @@ export default function Chat(props) {
     return () => ref_unediscussion.off();
   }, []);
 
-  // Watch the other user's typing status
-useEffect(() => {
-  const typingRef = ref_unediscussion.child("typing").child(profile.id);
-  typingRef.on("value", (snapshot) => {
-    setOtherTyping(snapshot.val()); // Update otherTyping state
-  });
-
-  return () => typingRef.off();
-}, []);
-
 // Update typing status in Firebase
 const handleInputChange = (text) => {
   setInputText(text);
-
-  // Set "typing" to true if inputText is not empty
-  const typingRef = ref_unediscussion.child("typing").child(userId);
-  if (text.length > 0 && !isTyping) {
-    setIsTyping(true);
-    typingRef.set(true);
-  } else if (text.length === 0 && isTyping) {
-    setIsTyping(false);
-    typingRef.set(false);
-  }
 };
 
   // Send a new message to Firebase
@@ -99,17 +53,13 @@ const handleInputChange = (text) => {
       text: inputText,
       sender: userId, // You can change this logic based on authentication
       date: new Date().toISOString(),
-      receiver: profile.id,
-      reactions : []
+      receiver: profile.id
     };
 
     const key = ref_unediscussion.push().key;
     const ref_unediscussion_key = ref_unediscussion.child(key);
     ref_unediscussion_key.set(newMessage);
     setInputText("");
-    const typingRef = ref_unediscussion.child("typing").child(userId);
-    typingRef.set(false);
-    setIsTyping(false);
   };
 
   // Render a single message
@@ -117,57 +67,15 @@ const handleInputChange = (text) => {
     const isMe = item.sender === userId;
     return (
       <TouchableOpacity
-      onLongPress={() => setSelectedMessageId(item.id)} // Show ReactionPicker
       style={[
         styles.messageContainer,
         isMe ? styles.myMessage : styles.otherMessage,
       ]}
     >
       <Text style={styles.messageText}>{item.text}</Text>
-
-      {/* Render reactions */}
-      {item.reactions && (
-        <View style={styles.reactionsContainer}>
-          {Object.values(item.reactions).map((reaction, index) => (
-            <Text key={index} style={styles.reaction}>
-              {reaction}
-            </Text>
-          ))}
-        </View>
-      )}
     </TouchableOpacity>
     );
   };
-
-  // Add animation state
-const typingOpacity = useRef(new Animated.Value(0)).current;
-
-// Watch for typing changes and animate
-useEffect(() => {
-  if (otherTyping) {
-    Animated.timing(typingOpacity, {
-      toValue: 1, // Fully visible
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  } else {
-    Animated.timing(typingOpacity, {
-      toValue: 0, // Fully hidden
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }
-}, [otherTyping]);
-
-const addReaction = (messageId, reaction) => {
-  const userId = firebase.auth().currentUser.uid; // Current user ID
-  const messageRef = ref_unediscussion.child(messageId);
-
-  // Update the 'reactions' field in Firebase
-  messageRef.child("reactions").update({
-    [userId]: reaction, // Add or update the reaction for this user
-  });
-};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -185,19 +93,6 @@ const addReaction = (messageId, reaction) => {
           {profile.pseudo} {profile.nom}
         </Text>
       </View>
-      {selectedMessageId && (
-        <TouchableWithoutFeedback onPress={() => setSelectedMessageId(null)} accessible={false}>
-          <View>
-          <TouchableWithoutFeedback>
-        <ReactionPicker
-          messageId={selectedMessageId}
-          onClose={() => setSelectedMessageId(null)}
-          addReaction={addReaction}
-        />
-      </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      )}
 
       {/* Chat Messages */}
       <KeyboardAvoidingView
@@ -211,13 +106,6 @@ const addReaction = (messageId, reaction) => {
           contentContainerStyle={styles.messagesList}
           inverted // Scrolls to the bottom
         />
-
-      {/* Typing Indicator */}
-      {otherTyping && (
-      <Animated.View style={[styles.typingIndicator, { opacity: typingOpacity }]}>
-        <Text style={styles.typingText}>Typing...</Text>
-      </Animated.View>
-      )}
 
         {/* Input Field */}
         <View style={styles.inputContainer}>
@@ -310,50 +198,5 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: "#fff",
     fontWeight: "bold",
-  },
-  typingIndicator: {
-    alignSelf: "flex-start",
-    marginLeft: 10,
-    marginBottom: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(0,0,0,0.1)",
-    borderRadius: 15,
-  },
-  typingText: {
-    color: "#666",
-    fontStyle: "italic",
-  },  
-  reactionsContainer: {
-    flexDirection: "row",
-    marginTop: 5,
-  },
-  reaction: {
-    fontSize: 16,
-    marginHorizontal: 5,
-  },
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // Semi-transparent background
-    pointerEvents: "box-none", // Pass touch events to child components
-  },  
-  reactionPicker: {
-    zIndex: 10,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#fff",
-    padding: 10,
-    borderRadius: 10,
-    elevation: 5,
-  },
-  reaction: {
-    fontSize: 24,
-    marginHorizontal: 10,
   },
 });
